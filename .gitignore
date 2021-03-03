@@ -1,0 +1,4 @@
+flask_venv/
+.idea/
+*.db
+__pycache__/
