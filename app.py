@@ -2,6 +2,7 @@ from flask import Flask
 from flask_restful import Api, Resource, reqparse
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_marshmallow import Marshmallow
 import os
 
 app = Flask(__name__)
@@ -12,6 +13,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db, render_as_batch=True)
+
+ma = Marshmallow(app)
 
 
 class AuthorModel(db.Model):
@@ -24,11 +27,11 @@ class AuthorModel(db.Model):
         self.name = name
         self.surname = surname
 
-    def to_dict(self):
-        d = {}
-        for column in self.__table__.columns:
-            d[column.name] = str(getattr(self, column.name))
-        return d
+    # def to_dict(self):
+    #     d = {}
+    #     for column in self.__table__.columns:
+    #         d[column.name] = str(getattr(self, column.name))
+    #     return d
 
 
 class QuoteModel(db.Model):
@@ -40,12 +43,34 @@ class QuoteModel(db.Model):
         self.author_id = author.id
         self.quote = quote
 
-    def to_dict(self):
-        d = {}
-        for column in self.__table__.columns:
-            d[column.name] = str(getattr(self, column.name))
-        d["author"] = self.author.to_dict()
-        return d
+    # def to_dict(self):
+    #     d = {}
+    #     for column in self.__table__.columns:
+    #         d[column.name] = str(getattr(self, column.name))
+    #     d["author"] = self.author.to_dict()
+    #     return d
+
+
+class AuthorSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = AuthorModel
+
+
+author_schema = AuthorSchema()
+authors_schema = AuthorSchema(many=True)
+
+
+class QuoteSchema(ma.SQLAlchemySchema):
+    class Meta:
+        model = QuoteModel
+
+    id = ma.auto_field()
+    quote = ma.auto_field()
+    author = ma.Nested(AuthorSchema())
+
+
+quote_schema = QuoteSchema()
+quotes_schema = QuoteSchema(many=True)
 
 
 class Author(Resource):
@@ -60,9 +85,9 @@ class Author(Resource):
             if not author:
                 return f"No author with id={id}", 404
             authors = [author]
-        authors_lst = [author.to_dict() for author in authors]
-
-        return authors_lst, 200
+        #authors_lst = [author.to_dict() for author in authors]
+        #return authors_lst, 200
+        return authors_schema.dump(authors), 200
 
     def post(self):
         parser = reqparse.RequestParser()
@@ -82,7 +107,7 @@ class Author(Resource):
         try:
             db.session.add(author)
             db.session.commit()
-            return author.to_dict(), 201
+            return author_schema.dump(author), 201
         except:
             return "An error occurred while adding new author" \
                    "or an author with such name or surname already exists. " \
@@ -109,7 +134,7 @@ class Author(Resource):
         try:
             db.session.add(author)
             db.session.commit()
-            return author.to_dict(), 200
+            return author_schema.dump(author)
         except:
             return "An error occurred while changing the author", 404
 
@@ -144,8 +169,7 @@ class Quotes(Resource):
                 return f"Author with id={author_id} has no quote with id={quote_id} or author is not exists", 404
             quotes = quote
 
-        quotes_lst = [quote.to_dict() for quote in quotes]
-        return quotes_lst, 200
+        return quotes_schema.dump(quotes), 200
 
     def post(self, author_id):
         parser = reqparse.RequestParser()
@@ -157,7 +181,7 @@ class Quotes(Resource):
         db.session.add(quote)
         db.session.commit()
 
-        return quote.to_dict(), 200
+        return quote_schema.dump(quote), 201
 
     def put(self, author_id, quote_id):
         quote = QuoteModel.query.filter(QuoteModel.author_id == author_id, QuoteModel.id == quote_id).all()
@@ -171,7 +195,7 @@ class Quotes(Resource):
 
         db.session.add(quote[0])
         db.session.commit()
-        return quote[0].to_dict(), 200
+        return quote_schema.dump(quote[0]), 200
 
     def delete(self, author_id, quote_id):
 
